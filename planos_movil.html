@@ -1,0 +1,1339 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PROTEKTA - Diseñador Móvil de Planos CCTV & Smart Home</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+            overflow: hidden;
+            background-color: #0f172a;
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        /* Canvas grid background pattern */
+        .bg-grid {
+            background-size: 20px 20px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        }
+        .bg-grid-light {
+            background-size: 20px 20px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+        }
+        /* Touch feedback active state */
+        .touch-active:active {
+            transform: scale(0.95);
+            opacity: 0.8;
+        }
+        /* Bottom Sheet Drawer animation */
+        .drawer-transition {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* Canvas wrapper for fixed viewport */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col justify-between text-slate-100 bg-slate-900">
+
+    <!-- 1. APP HEADER -->
+    <header class="h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 flex items-center justify-between px-3 z-30 shrink-0">
+        <!-- Logo PROTEKTA -->
+        <div class="flex items-center gap-2">
+            <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-700 to-indigo-900 flex items-center justify-center shadow-md shadow-blue-900/50 border border-blue-500/30">
+                <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="rgba(13, 71, 161, 0.5)"/>
+                    <path d="M9 12l2 2 4-4" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div>
+                <div class="font-bold text-sm tracking-wide text-white leading-tight flex items-center gap-1.5">
+                    PROTEKTA
+                    <span class="text-[9px] bg-blue-600/80 text-blue-100 px-1.5 py-0.5 rounded uppercase tracking-wider">PRO</span>
+                </div>
+                <div class="text-[10px] text-blue-300/80 leading-none">CCTV & Smart Home Design</div>
+            </div>
+        </div>
+
+        <!-- Quick Top Actions -->
+        <div class="flex items-center gap-1.5">
+            <!-- Template Quick Selector -->
+            <button onclick="openModal('templates-modal')" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 flex items-center gap-1.5 touch-active">
+                <i class="fa-solid fa-folder-open text-blue-400"></i>
+                <span class="hidden sm:inline">Plantillas</span>
+            </button>
+            <!-- Save JSON -->
+            <button onclick="saveProjectJSON()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs border border-slate-700 touch-active" title="Guardar Proyecto">
+                <i class="fa-solid fa-floppy-disk text-slate-300"></i>
+            </button>
+            <!-- Export Image -->
+            <button onclick="exportPNG()" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-lg shadow-blue-600/30 flex items-center gap-1.5 touch-active">
+                <i class="fa-solid fa-file-export"></i>
+                <span>Exportar</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- 2. MAIN CANVAS AREA & TOUCH OVERLAYS -->
+    <main class="relative flex-1 w-full overflow-hidden bg-slate-950 bg-grid">
+        <div id="canvas-container">
+            <canvas id="app-canvas" class="block w-full h-full"></canvas>
+        </div>
+
+        <!-- Floating D-Pad / Precision Touch Controls (Floating on Canvas) -->
+        <div class="absolute top-3 left-3 z-20 flex flex-col gap-1 bg-slate-900/85 backdrop-blur p-1.5 rounded-xl border border-slate-800 shadow-xl">
+            <div class="text-[10px] font-semibold text-slate-400 text-center mb-0.5">CONTROLES</div>
+            <div class="grid grid-cols-3 gap-1 w-28 h-28">
+                <div></div>
+                <button onclick="panCanvas(0, -30)" class="bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-slate-200 active:bg-blue-600 active:text-white"><i class="fa-solid fa-chevron-up"></i></button>
+                <div></div>
+                <button onclick="panCanvas(-30, 0)" class="bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-slate-200 active:bg-blue-600 active:text-white"><i class="fa-solid fa-chevron-left"></i></button>
+                <button onclick="resetView()" class="bg-blue-950/80 hover:bg-blue-900 border border-blue-600/40 rounded-lg flex items-center justify-center text-blue-400 text-xs active:bg-blue-600 active:text-white" title="Centrar Vista"><i class="fa-solid fa-crosshairs"></i></button>
+                <button onclick="panCanvas(30, 0)" class="bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-slate-200 active:bg-blue-600 active:text-white"><i class="fa-solid fa-chevron-right"></i></button>
+                <div></div>
+                <button onclick="panCanvas(0, 30)" class="bg-slate-800 hover:bg-slate-700 rounded-lg flex items-center justify-center text-slate-200 active:bg-blue-600 active:text-white"><i class="fa-solid fa-chevron-down"></i></button>
+                <div></div>
+            </div>
+            <div class="flex gap-1 mt-1">
+                <button onclick="zoomCanvas(1.15)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-xs font-bold active:bg-blue-600"><i class="fa-solid fa-plus"></i></button>
+                <button onclick="zoomCanvas(0.85)" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200 text-xs font-bold active:bg-blue-600"><i class="fa-solid fa-minus"></i></button>
+            </div>
+        </div>
+
+        <!-- Quick Mode Indicator / Active Action Banner -->
+        <div id="status-bar" class="absolute top-3 right-3 z-20 bg-slate-900/90 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-full text-xs text-slate-300 shadow-lg flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span id="current-tool-text">Modo: Selección / Arrastre</span>
+        </div>
+
+        <!-- Floating Quick Rotation Controls for Selected Object -->
+        <div id="quick-rotation-bar" class="hidden absolute bottom-20 left-1/2 -translate-x-1/2 z-20 bg-slate-900/95 backdrop-blur border border-blue-500/40 p-1.5 rounded-full shadow-2xl flex items-center gap-2">
+            <button onclick="rotateSelected(-15)" class="px-3 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold flex items-center gap-1 active:bg-blue-600 active:text-white">
+                <i class="fa-solid fa-rotate-left"></i> -15°
+            </button>
+            <button onclick="rotateSelected(-5)" class="px-2.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold active:bg-blue-600 active:text-white">-5°</button>
+            <span class="text-xs font-mono text-blue-300 font-bold px-1" id="quick-rot-display">0°</span>
+            <button onclick="rotateSelected(5)" class="px-2.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold active:bg-blue-600 active:text-white">+5°</button>
+            <button onclick="rotateSelected(15)" class="px-3 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-blue-400 text-xs font-bold flex items-center gap-1 active:bg-blue-600 active:text-white">
+                +15° <i class="fa-solid fa-rotate-right"></i>
+            </button>
+            <div class="h-4 w-px bg-slate-700"></div>
+            <button onclick="deleteSelected()" class="p-1.5 rounded-full bg-red-950 text-red-400 hover:bg-red-900 text-xs px-2.5 flex items-center gap-1">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+    </main>
+
+    <!-- 3. BOTTOM SLIDING PANEL / DRAWER FOR TOOLKIT ITEMS -->
+    <div id="drawer-panel" class="bg-slate-900 border-t border-slate-800 z-30 transition-all duration-300 max-h-[45vh] flex flex-col shrink-0">
+        <!-- Drawer Header with Tab Content Title -->
+        <div class="px-4 py-2 bg-slate-950/80 border-b border-slate-800/80 flex justify-between items-center">
+            <span id="tab-title" class="text-xs font-bold tracking-wider text-blue-400 uppercase flex items-center gap-2">
+                <i class="fa-solid fa-vector-square"></i> Herramientas de Trazado
+            </span>
+            <button onclick="toggleDrawer()" class="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded bg-slate-800">
+                <i id="drawer-toggle-icon" class="fa-solid fa-chevron-down"></i>
+            </button>
+        </div>
+
+        <!-- Drawer Content Dynamic Area -->
+        <div id="drawer-content" class="p-3 overflow-y-auto min-h-[120px] max-h-[35vh]">
+            <!-- Tab 1: TRAZAR (Walls, Doors, Measurement) -->
+            <div id="tab-trazar" class="tab-pane grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button onclick="setTool('wall')" class="tool-btn flex flex-col items-center p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40 transition">
+                    <i class="fa-solid fa-block-brick text-2xl text-amber-500 mb-1"></i>
+                    <span class="text-xs font-semibold">Muro / Pared</span>
+                    <span class="text-[10px] text-slate-400">Trazar estructura</span>
+                </button>
+                <button onclick="setTool('door')" class="tool-btn flex flex-col items-center p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40 transition">
+                    <i class="fa-solid fa-door-open text-2xl text-amber-400 mb-1"></i>
+                    <span class="text-xs font-semibold">Puerta</span>
+                    <span class="text-[10px] text-slate-400">Insertar en muro</span>
+                </button>
+                <button onclick="setTool('window')" class="tool-btn flex flex-col items-center p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40 transition">
+                    <i class="fa-solid fa-border-all text-2xl text-cyan-400 mb-1"></i>
+                    <span class="text-xs font-semibold">Ventana</span>
+                    <span class="text-[10px] text-slate-400">Insertar en muro</span>
+                </button>
+                <button onclick="setTool('ruler')" class="tool-btn flex flex-col items-center p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40 transition">
+                    <i class="fa-solid fa-ruler-combined text-2xl text-blue-400 mb-1"></i>
+                    <span class="text-xs font-semibold">Regla Medición</span>
+                    <span class="text-[10px] text-slate-400">Medir distancias</span>
+                </button>
+            </div>
+
+            <!-- Tab 2: CÁMARAS & SEGURIDAD -->
+            <div id="tab-camaras" class="tab-pane hidden grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <button onclick="addDevice('dome')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-blue-950 flex items-center justify-center text-blue-400 border border-blue-500/30">
+                        <i class="fa-solid fa-record-vinyl text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">Cámara Domo</div>
+                        <div class="text-[10px] text-slate-400">360° Interior / Gran Angular</div>
+                    </div>
+                </button>
+                <button onclick="addDevice('bullet')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-indigo-950 flex items-center justify-center text-indigo-400 border border-indigo-500/30">
+                        <i class="fa-solid fa-video text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">Cámara Bullet</div>
+                        <div class="text-[10px] text-slate-400">Exterior Larga Distancia</div>
+                    </div>
+                </button>
+                <button onclick="addDevice('ptz')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-purple-950 flex items-center justify-center text-purple-400 border border-purple-500/30">
+                        <i class="fa-solid fa-arrows-spin text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">Cámara PTZ Pro</div>
+                        <div class="text-[10px] text-slate-400">Zoom Motorizado & Pan</div>
+                    </div>
+                </button>
+                <button onclick="addDevice('pir')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-950 flex items-center justify-center text-emerald-400 border border-emerald-500/30">
+                        <i class="fa-solid fa-person-rays text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">Sensor PIR Movimiento</div>
+                        <div class="text-[10px] text-slate-400">Detector Detección Térmica</div>
+                    </div>
+                </button>
+                <button onclick="addDevice('magnetic')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-amber-950 flex items-center justify-center text-amber-400 border border-amber-500/30">
+                        <i class="fa-solid fa-magnet text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">Contacto Magnético</div>
+                        <div class="text-[10px] text-slate-400">Sensor Puerta/Ventana</div>
+                    </div>
+                </button>
+                <button onclick="addDevice('nvr')" class="flex items-center gap-3 p-2.5 rounded-xl bg-slate-800 border border-slate-700 hover:border-blue-500 active:bg-blue-900/40">
+                    <div class="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-red-400 border border-red-500/30">
+                        <i class="fa-solid fa-server text-xl"></i>
+                    </div>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-100">NVR / Rack Grabador</div>
+                        <div class="text-[10px] text-slate-400">Centro de Monitoreo</div>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Tab 3: MUEBLES & CONTEXTO -->
+            <div id="tab-muebles" class="tab-pane hidden grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button onclick="addFurniture('desk')" class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-2 text-left hover:border-blue-500">
+                    <i class="fa-solid fa-table text-xl text-amber-600"></i>
+                    <div>
+                        <div class="text-xs font-semibold">Escritorio</div>
+                        <div class="text-[9px] text-slate-400">Mueble de trabajo</div>
+                    </div>
+                </button>
+                <button onclick="addFurniture('sofa')" class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-2 text-left hover:border-blue-500">
+                    <i class="fa-solid fa-couch text-xl text-indigo-400"></i>
+                    <div>
+                        <div class="text-xs font-semibold">Sofá / Sillón</div>
+                        <div class="text-[9px] text-slate-400">Área de descanso</div>
+                    </div>
+                </button>
+                <button onclick="addFurniture('counter')" class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-2 text-left hover:border-blue-500">
+                    <i class="fa-solid fa-store text-xl text-emerald-400"></i>
+                    <div>
+                        <div class="text-xs font-semibold">Mostrador / Caja</div>
+                        <div class="text-[9px] text-slate-400">Atención cliente</div>
+                    </div>
+                </button>
+                <button onclick="addFurniture('plant')" class="p-2.5 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-2 text-left hover:border-blue-500">
+                    <i class="fa-solid fa-leaf text-xl text-emerald-500"></i>
+                    <div>
+                        <div class="text-xs font-semibold">Planta / Decoración</div>
+                        <div class="text-[9px] text-slate-400">Obstáculo visual</div>
+                    </div>
+                </button>
+            </div>
+
+            <!-- Tab 4: PROPIEDADES DE OBJETO SELECCIONADO -->
+            <div id="tab-propiedades" class="tab-pane hidden">
+                <div id="no-selection-msg" class="text-center py-6 text-slate-500 text-xs">
+                    <i class="fa-solid fa-hand-pointer text-2xl mb-2 block text-slate-600"></i>
+                    Toca un objeto en el plano para editar sus propiedades y FOV de lente.
+                </div>
+                <div id="properties-editor" class="hidden space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span class="text-xs font-bold text-blue-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-sliders"></i> Configurar Objeto Seleccionado
+                        </span>
+                        <span id="prop-type-badge" class="text-[10px] font-mono bg-blue-950 text-blue-300 px-2 py-0.5 rounded border border-blue-800/50">CAM_DOME</span>
+                    </div>
+
+                    <!-- Label tag -->
+                    <div>
+                        <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Nombre / Identificador</label>
+                        <input type="text" id="prop-label" onchange="updateSelectedProp('label', this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <!-- Camera Specific Controls -->
+                    <div id="camera-prop-controls" class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Ángulo Visión (FOV): <span id="fov-val" class="text-blue-400">90°</span></label>
+                                <input type="range" id="prop-fov" min="30" max="180" value="90" oninput="updateSelectedProp('fov', this.value)" class="w-full accent-blue-500">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Alcance Distancia: <span id="range-val" class="text-blue-400">12m</span></label>
+                                <input type="range" id="prop-range" min="3" max="35" value="12" oninput="updateSelectedProp('range', this.value)" class="w-full accent-blue-500">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Modo / Tipo de Lente CCTV</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="setLensMode('standard')" class="py-1.5 px-2 rounded-lg bg-blue-950/60 border border-blue-500/40 text-[11px] font-medium text-blue-300 flex items-center justify-center gap-1 active:bg-blue-600 active:text-white">
+                                    <span class="w-2 h-2 rounded-full bg-blue-400"></span> Estándar
+                                </button>
+                                <button onclick="setLensMode('ir')" class="py-1.5 px-2 rounded-lg bg-red-950/60 border border-red-500/40 text-[11px] font-medium text-red-300 flex items-center justify-center gap-1 active:bg-red-600 active:text-white">
+                                    <span class="w-2 h-2 rounded-full bg-red-500"></span> Infrarrojo
+                                </button>
+                                <button onclick="setLensMode('4k')" class="py-1.5 px-2 rounded-lg bg-cyan-950/60 border border-cyan-500/40 text-[11px] font-medium text-cyan-300 flex items-center justify-center gap-1 active:bg-cyan-600 active:text-white">
+                                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Visión 4K
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Common Action Buttons -->
+                    <div class="flex gap-2 pt-1">
+                        <button onclick="deleteSelected()" class="flex-1 py-2 rounded-lg bg-red-950/80 hover:bg-red-900 border border-red-700/50 text-red-300 text-xs font-semibold flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-trash-can"></i> Eliminar
+                        </button>
+                        <button onclick="duplicateSelected()" class="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-copy"></i> Duplicar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 5: COTIZACIÓN Y BOM RESUMEN -->
+            <div id="tab-cotizacion" class="tab-pane hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1">
+                        <i class="fa-solid fa-calculator"></i> Presupuesto Estimado
+                    </span>
+                    <button onclick="renderBOM()" class="text-[10px] text-blue-400 hover:underline"><i class="fa-solid fa-rotate"></i> Recalcular</button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 text-[10px]">
+                                <th class="py-1 font-semibold">EQUIPO / CONCEPTO</th>
+                                <th class="py-1 font-semibold text-center">CANT.</th>
+                                <th class="py-1 font-semibold text-right">P. UNIT ($)</th>
+                                <th class="py-1 font-semibold text-right">SUBTOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bom-table-body" class="divide-y divide-slate-800 text-slate-200">
+                            <!-- Dynamic Rows -->
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t border-slate-700 font-bold text-white">
+                                <td colspan="3" class="pt-2 text-right">TOTAL ESTIMADO:</td>
+                                <td id="bom-total-price" class="pt-2 text-right text-emerald-400 font-mono text-sm">$0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. BOTTOM MOBILE NAVIGATION BAR (Fixed Mobile App Nav) -->
+    <nav class="h-16 bg-slate-950 border-t border-slate-800 flex items-center justify-around px-1 z-40 shrink-0">
+        <button onclick="switchTab('trazar')" id="nav-trazar" class="nav-tab active flex flex-col items-center justify-center flex-1 py-1 text-blue-400 transition">
+            <i class="fa-solid fa-pen-ruler text-lg"></i>
+            <span class="text-[10px] font-medium mt-0.5">Trazar</span>
+        </button>
+        <button onclick="switchTab('camaras')" id="nav-camaras" class="nav-tab flex flex-col items-center justify-center flex-1 py-1 text-slate-400 transition">
+            <i class="fa-solid fa-video text-lg"></i>
+            <span class="text-[10px] font-medium mt-0.5">Cámaras</span>
+        </button>
+        <button onclick="switchTab('muebles')" id="nav-muebles" class="nav-tab flex flex-col items-center justify-center flex-1 py-1 text-slate-400 transition">
+            <i class="fa-solid fa-couch text-lg"></i>
+            <span class="text-[10px] font-medium mt-0.5">Muebles</span>
+        </button>
+        <button onclick="switchTab('propiedades')" id="nav-propiedades" class="nav-tab flex flex-col items-center justify-center flex-1 py-1 text-slate-400 transition relative">
+            <i class="fa-solid fa-sliders text-lg"></i>
+            <span class="text-[10px] font-medium mt-0.5">Ajustes</span>
+            <span id="prop-badge" class="hidden absolute top-1 right-3 w-2 h-2 rounded-full bg-blue-500"></span>
+        </button>
+        <button onclick="switchTab('cotizacion')" id="nav-cotizacion" class="nav-tab flex flex-col items-center justify-center flex-1 py-1 text-slate-400 transition">
+            <i class="fa-solid fa-file-invoice-dollar text-lg"></i>
+            <span class="text-[10px] font-medium mt-0.5">Cotizar</span>
+        </button>
+    </nav>
+
+    <!-- MODAL: PLANTILLAS PREDISEÑADAS -->
+    <div id="templates-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-cubes text-blue-400"></i> Plantillas Rápidas de Prueba
+                </h3>
+                <button onclick="closeModal('templates-modal')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="space-y-2.5">
+                <button onclick="loadTemplate('papizza')" class="w-full p-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 flex items-center gap-3 text-left transition">
+                    <div class="w-10 h-10 rounded-lg bg-amber-950/80 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                        <i class="fa-solid fa-pizza-slice text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-white">Local Comercial "Papizza"</div>
+                        <div class="text-[10px] text-slate-400">Área de mostrador, cocina y salón principal con 4 cámaras.</div>
+                    </div>
+                </button>
+                <button onclick="loadTemplate('podosmart')" class="w-full p-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 flex items-center gap-3 text-left transition">
+                    <div class="w-10 h-10 rounded-lg bg-blue-950/80 border border-blue-500/30 flex items-center justify-center text-blue-400 shrink-0">
+                        <i class="fa-solid fa-user-doctor text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-white">Oficina / Clínica "Podosmart"</div>
+                        <div class="text-[10px] text-slate-400">Recepción, consultorio, pasillo y racks NVR.</div>
+                    </div>
+                </button>
+                <button onclick="loadTemplate('residencial')" class="w-full p-3 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 flex items-center gap-3 text-left transition">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-950/80 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                        <i class="fa-solid fa-house-user text-xl"></i>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-white">Residencial 2 Recámaras</div>
+                        <div class="text-[10px] text-slate-400">Acceso principal, sala, 2 recámaras y patio posterior.</div>
+                    </div>
+                </button>
+            </div>
+            <div class="pt-2 text-right">
+                <button onclick="closeModal('templates-modal')" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg font-semibold">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        /**
+         * PROTEKTA Mobile Floorplan & CCTV Designer
+         * Core Engine with Touch Support & Title Block Export
+         */
+
+        // Canvas Setup & State
+        const canvas = document.getElementById('app-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('canvas-container');
+
+        // Viewport Pan/Zoom state
+        let scale = 1;
+        let panX = 40;
+        let panY = 40;
+        const GRID_SIZE = 20; // 1 grid square = 1 meter approx (20px)
+
+        // Application Data State
+        let activeTool = 'select'; // 'select', 'wall', 'door', 'window', 'ruler'
+        let walls = [];            // [{ x1, y1, x2, y2, type }]
+        let devices = [];          // [{ id, type, x, y, rotation, fov, range, lensMode, label }]
+        let furniture = [];        // [{ id, type, x, y, rotation, label }]
+        let selectedObject = null; // Reference to active object
+        let selectedType = null;   // 'device', 'furniture', 'wall'
+
+        // Touch / Mouse Tracking State
+        let isDrawingWall = false;
+        let currentWallStart = null;
+        let isDraggingObject = false;
+        let dragOffset = { x: 0, y: 0 };
+        let touchStartDist = 0; // For pinch zoom
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        // Equipment Catalog Pricing (BOM calculations)
+        const CATALOG = {
+            dome: { name: 'Cámara Domo HD 1080p Interior', price: 65.00 },
+            bullet: { name: 'Cámara Bullet IR Exterior 40m', price: 85.00 },
+            ptz: { name: 'Cámara PTZ Pro Motorizada 360°', price: 280.00 },
+            pir: { name: 'Sensor PIR Movimiento Smart', price: 35.00 },
+            magnetic: { name: 'Contacto Magnético Inalámbrico', price: 22.00 },
+            nvr: { name: 'NVR 8 Canales PoE + Disco 2TB', price: 320.00 },
+            utp_cable: { name: 'Bobina Cable UTP Cat6 (m)', price: 0.85 },
+            installation: { name: 'Mano de Obra / Configuración (por pza)', price: 25.00 }
+        };
+
+        // Initialize App
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            setupTouchAndMouseEvents();
+            loadTemplate('papizza'); // Default initial layout
+            requestAnimationFrame(renderLoop);
+        });
+
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            drawCanvas();
+        }
+
+        // --- DRAWING & RENDERING ENGINE ---
+        function renderLoop() {
+            drawCanvas();
+            requestAnimationFrame(renderLoop);
+        }
+
+        function drawCanvas() {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Apply Pan & Zoom Transform
+            ctx.translate(panX, panY);
+            ctx.scale(scale, scale);
+
+            // 1. Draw Grid
+            drawGrid();
+
+            // 2. Draw Walls
+            walls.forEach(w => drawWall(w));
+
+            // 3. Draw In-progress Wall
+            if (isDrawingWall && currentWallStart && tempMousePos) {
+                ctx.beginPath();
+                ctx.moveTo(currentWallStart.x, currentWallStart.y);
+                ctx.lineTo(tempMousePos.x, tempMousePos.y);
+                ctx.strokeStyle = activeTool === 'wall' ? '#f59e0b' : (activeTool === 'door' ? '#fbbf24' : '#38bdf8');
+                ctx.lineWidth = activeTool === 'wall' ? 8 : 4;
+                ctx.setLineDash([5, 5]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // 4. Draw Furniture
+            furniture.forEach(f => drawFurnitureItem(f));
+
+            // 5. Draw CCTV Devices & Vision Cones (FOV)
+            devices.forEach(d => drawDeviceItem(d));
+
+            // 6. Draw Selected Object Highlight & Touch Handles
+            if (selectedObject) {
+                drawSelectionHighlight(selectedObject);
+            }
+
+            ctx.restore();
+        }
+
+        function drawGrid() {
+            const width = 3000;
+            const height = 3000;
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            for (let x = -width; x < width; x += GRID_SIZE) {
+                ctx.moveTo(x, -height);
+                ctx.lineTo(x, height);
+            }
+            for (let y = -height; y < height; y += GRID_SIZE) {
+                ctx.moveTo(-width, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+        }
+
+        function drawWall(w) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(w.x1, w.y1);
+            ctx.lineTo(w.x2, w.y2);
+
+            if (w.type === 'door') {
+                ctx.strokeStyle = '#d97706';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+                // Arc for swing
+                const midX = (w.x1 + w.x2) / 2;
+                const midY = (w.y1 + w.y2) / 2;
+                ctx.fillStyle = '#f59e0b';
+                ctx.fillRect(midX - 4, midY - 4, 8, 8);
+            } else if (w.type === 'window') {
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 5;
+                ctx.stroke();
+            } else { // Wall
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 10;
+                ctx.lineCap = 'round';
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+
+        function drawDeviceItem(d) {
+            ctx.save();
+            ctx.translate(d.x, d.y);
+
+            // A. DRAW FOV CONE (Vision Sector)
+            if (d.type === 'dome' || d.type === 'bullet' || d.type === 'ptz' || d.type === 'pir') {
+                const angleRad = (d.rotation * Math.PI) / 180;
+                const fovRad = ((d.fov || 90) * Math.PI) / 180;
+                const rangePx = (d.range || 12) * GRID_SIZE;
+
+                ctx.save();
+                ctx.rotate(angleRad);
+
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, rangePx, -fovRad / 2, fovRad / 2);
+                ctx.closePath();
+
+                // Lens Mode Color Scheme
+                let gradient;
+                if (d.lensMode === 'ir') {
+                    // IR Night Vision (Red)
+                    gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, rangePx);
+                    gradient.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
+                    gradient.addColorStop(1, 'rgba(239, 68, 68, 0.05)');
+                    ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                } else if (d.lensMode === '4k') {
+                    // 4K High Def (Cyan)
+                    gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, rangePx);
+                    gradient.addColorStop(0, 'rgba(6, 182, 212, 0.4)');
+                    gradient.addColorStop(1, 'rgba(6, 182, 212, 0.05)');
+                    ctx.strokeStyle = 'rgba(6, 182, 212, 0.6)';
+                } else {
+                    // Standard CCTV (Blue - Matching PROTEKTA style)
+                    gradient = ctx.createRadialGradient(0, 0, 5, 0, 0, rangePx);
+                    gradient.addColorStop(0, 'rgba(21, 101, 192, 0.45)');
+                    gradient.addColorStop(1, 'rgba(13, 71, 161, 0.08)');
+                    ctx.strokeStyle = 'rgba(59, 130, 246, 0.7)';
+                }
+
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // B. DEVICE ICON & BADGE
+            ctx.rotate((d.rotation * Math.PI) / 180);
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.fillStyle = '#0f172a';
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = d.type === 'nvr' ? '#ef4444' : '#2563eb';
+            ctx.stroke();
+
+            // Internal Symbol
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 12px "Font Awesome 6 Free"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            let iconUnicode = '\uf03d'; // Default Video
+            if (d.type === 'dome') iconUnicode = '\uf8d9';
+            if (d.type === 'ptz') iconUnicode = '\uf3e5';
+            if (d.type === 'pir') iconUnicode = '\uf183';
+            if (d.type === 'magnetic') iconUnicode = '\uf076';
+            if (d.type === 'nvr') iconUnicode = '\uf233';
+
+            ctx.fillText(iconUnicode, 0, 0);
+
+            // Label tag below
+            ctx.rotate(-(d.rotation * Math.PI) / 180); // Unrotate text
+            ctx.font = '600 9px Inter, sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillText(d.label || d.type.toUpperCase(), 0, 22);
+
+            ctx.restore();
+        }
+
+        function drawFurnitureItem(f) {
+            ctx.save();
+            ctx.translate(f.x, f.y);
+            ctx.rotate((f.rotation * Math.PI) / 180);
+
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.5;
+
+            if (f.type === 'desk') {
+                ctx.fillRect(-20, -12, 40, 24);
+                ctx.strokeRect(-20, -12, 40, 24);
+            } else if (f.type === 'sofa') {
+                ctx.fillRect(-25, -12, 50, 24);
+                ctx.strokeRect(-25, -12, 50, 24);
+                // Armrests
+                ctx.fillRect(-25, -12, 8, 24);
+                ctx.fillRect(17, -12, 8, 24);
+            } else if (f.type === 'counter') {
+                ctx.fillRect(-30, -10, 60, 20);
+                ctx.strokeRect(-30, -10, 60, 20);
+            } else if (f.type === 'plant') {
+                ctx.beginPath();
+                ctx.arc(0, 0, 12, 0, Math.PI * 2);
+                ctx.fillStyle = '#065f46';
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        function drawSelectionHighlight(obj) {
+            ctx.save();
+            ctx.translate(obj.x, obj.y);
+            ctx.beginPath();
+            ctx.arc(0, 0, 22, 0, Math.PI * 2);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // --- TOUCH & MOUSE INTERACTION HANDLERS ---
+        let tempMousePos = null;
+
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            const rawX = clientX - rect.left;
+            const rawY = clientY - rect.top;
+
+            return {
+                x: (rawX - panX) / scale,
+                y: (rawY - panY) / scale
+            };
+        }
+
+        function setupTouchAndMouseEvents() {
+            // Touch Start / Mouse Down
+            const handleStart = (e) => {
+                if (e.touches && e.touches.length === 2) {
+                    // Pinch Zoom Start
+                    touchStartDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    return;
+                }
+
+                const coords = getCanvasCoords(e);
+                tempMousePos = coords;
+
+                if (activeTool === 'wall' || activeTool === 'door' || activeTool === 'window') {
+                    isDrawingWall = true;
+                    currentWallStart = { x: snapToGrid(coords.x), y: snapToGrid(coords.y) };
+                } else if (activeTool === 'select') {
+                    // Check Object Click
+                    const clickedDev = devices.find(d => Math.hypot(d.x - coords.x, d.y - coords.y) < 25);
+                    const clickedFurn = furniture.find(f => Math.hypot(f.x - coords.x, f.y - coords.y) < 25);
+
+                    if (clickedDev) {
+                        selectObject(clickedDev, 'device');
+                        isDraggingObject = true;
+                        dragOffset = { x: coords.x - clickedDev.x, y: coords.y - clickedDev.y };
+                    } else if (clickedFurn) {
+                        selectObject(clickedFurn, 'furniture');
+                        isDraggingObject = true;
+                        dragOffset = { x: coords.x - clickedFurn.x, y: coords.y - clickedFurn.y };
+                    } else {
+                        // Start Pan
+                        deselectObject();
+                        isPanning = true;
+                        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                        panStart = { x: clientX - panX, y: clientY - panY };
+                    }
+                }
+            };
+
+            // Touch Move / Mouse Move
+            const handleMove = (e) => {
+                if (e.touches && e.touches.length === 2) {
+                    // Pinch Zoom Logic
+                    const dist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const zoomFactor = dist / touchStartDist;
+                    scale = Math.min(Math.max(0.5, scale * zoomFactor), 2.5);
+                    touchStartDist = dist;
+                    return;
+                }
+
+                const coords = getCanvasCoords(e);
+                tempMousePos = coords;
+
+                if (isDraggingObject && selectedObject) {
+                    selectedObject.x = snapToGrid(coords.x - dragOffset.x);
+                    selectedObject.y = snapToGrid(coords.y - dragOffset.y);
+                } else if (isPanning) {
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    panX = clientX - panStart.x;
+                    panY = clientY - panStart.y;
+                }
+            };
+
+            // Touch End / Mouse Up
+            const handleEnd = (e) => {
+                if (isDrawingWall && currentWallStart && tempMousePos) {
+                    const snapX = snapToGrid(tempMousePos.x);
+                    const snapY = snapToGrid(tempMousePos.y);
+
+                    if (Math.hypot(snapX - currentWallStart.x, snapY - currentWallStart.y) > 10) {
+                        walls.push({
+                            x1: currentWallStart.x,
+                            y1: currentWallStart.y,
+                            x2: snapX,
+                            y2: snapY,
+                            type: activeTool
+                        });
+                    }
+                }
+
+                isDrawingWall = false;
+                currentWallStart = null;
+                isDraggingObject = false;
+                isPanning = false;
+            };
+
+            // Add Event Listeners
+            canvas.addEventListener('mousedown', handleStart);
+            canvas.addEventListener('mousemove', handleMove);
+            window.addEventListener('mouseup', handleEnd);
+
+            canvas.addEventListener('touchstart', handleStart, { passive: false });
+            canvas.addEventListener('touchmove', handleMove, { passive: false });
+            window.addEventListener('touchend', handleEnd);
+        }
+
+        function snapToGrid(val) {
+            return Math.round(val / 10) * 10;
+        }
+
+        // --- UI & STATE ACTIONS ---
+        function setTool(tool) {
+            activeTool = tool;
+            deselectObject();
+            document.getElementById('current-tool-text').innerText = `Modo: ${tool.toUpperCase()}`;
+        }
+
+        function selectObject(obj, type) {
+            selectedObject = obj;
+            selectedType = type;
+
+            // Show Quick Rotation Floating Controller
+            document.getElementById('quick-rotation-bar').classList.remove('hidden');
+            document.getElementById('quick-rot-display').innerText = `${obj.rotation || 0}°`;
+
+            // Update Properties Drawer Input Fields
+            document.getElementById('no-selection-msg').classList.add('hidden');
+            document.getElementById('properties-editor').classList.remove('hidden');
+            document.getElementById('prop-type-badge').innerText = obj.type.toUpperCase();
+            document.getElementById('prop-label').value = obj.label || '';
+
+            if (type === 'device') {
+                document.getElementById('camera-prop-controls').classList.remove('hidden');
+                document.getElementById('prop-fov').value = obj.fov || 90;
+                document.getElementById('fov-val').innerText = `${obj.fov || 90}°`;
+                document.getElementById('prop-range').value = obj.range || 12;
+                document.getElementById('range-val').innerText = `${obj.range || 12}m`;
+            } else {
+                document.getElementById('camera-prop-controls').classList.add('hidden');
+            }
+
+            // Highlight nav badge
+            document.getElementById('prop-badge').classList.remove('hidden');
+        }
+
+        function deselectObject() {
+            selectedObject = null;
+            selectedType = null;
+            document.getElementById('quick-rotation-bar').classList.add('hidden');
+            document.getElementById('properties-editor').classList.add('hidden');
+            document.getElementById('no-selection-msg').classList.remove('hidden');
+            document.getElementById('prop-badge').classList.add('hidden');
+        }
+
+        function rotateSelected(delta) {
+            if (!selectedObject) return;
+            selectedObject.rotation = ((selectedObject.rotation || 0) + delta + 360) % 360;
+            document.getElementById('quick-rot-display').innerText = `${selectedObject.rotation}°`;
+        }
+
+        function updateSelectedProp(key, value) {
+            if (!selectedObject) return;
+            if (key === 'label') selectedObject.label = value;
+            if (key === 'fov') {
+                selectedObject.fov = parseInt(value);
+                document.getElementById('fov-val').innerText = `${value}°`;
+            }
+            if (key === 'range') {
+                selectedObject.range = parseInt(value);
+                document.getElementById('range-val').innerText = `${value}m`;
+            }
+        }
+
+        function setLensMode(mode) {
+            if (selectedObject && selectedType === 'device') {
+                selectedObject.lensMode = mode;
+            }
+        }
+
+        function deleteSelected() {
+            if (!selectedObject) return;
+            if (selectedType === 'device') {
+                devices = devices.filter(d => d !== selectedObject);
+            } else if (selectedType === 'furniture') {
+                furniture = furniture.filter(f => f !== selectedObject);
+            }
+            deselectObject();
+        }
+
+        function duplicateSelected() {
+            if (!selectedObject) return;
+            const copy = JSON.parse(JSON.stringify(selectedObject));
+            copy.x += 30;
+            copy.y += 30;
+            if (selectedType === 'device') {
+                devices.push(copy);
+                selectObject(copy, 'device');
+            } else {
+                furniture.push(copy);
+                selectObject(copy, 'furniture');
+            }
+        }
+
+        function addDevice(type) {
+            const newDev = {
+                id: Date.now(),
+                type: type,
+                x: -panX / scale + 150,
+                y: -panY / scale + 150,
+                rotation: 0,
+                fov: type === 'ptz' ? 120 : (type === 'dome' ? 100 : 80),
+                range: 14,
+                lensMode: 'standard',
+                label: `CAM-${devices.length + 1}`
+            };
+            devices.push(newDev);
+            setTool('select');
+            selectObject(newDev, 'device');
+        }
+
+        function addFurniture(type) {
+            const newFurn = {
+                id: Date.now(),
+                type: type,
+                x: -panX / scale + 150,
+                y: -panY / scale + 150,
+                rotation: 0,
+                label: type.toUpperCase()
+            };
+            furniture.push(newFurn);
+            setTool('select');
+            selectObject(newFurn, 'furniture');
+        }
+
+        // --- NAVIGATION TABS & DRAWER CONTROL ---
+        function switchTab(tabId) {
+            // Update Tab UI
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('text-blue-400', 'active'));
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.add('text-slate-400'));
+
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            activeNav.classList.remove('text-slate-400');
+            activeNav.classList.add('text-blue-400', 'active');
+
+            // Hide/Show Content Panes
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden'));
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+
+            // Set Title text
+            const titles = {
+                trazar: '<i class="fa-solid fa-pen-ruler"></i> Herramientas de Trazado',
+                camaras: '<i class="fa-solid fa-video"></i> Cámaras y Sensores Smart',
+                muebles: '<i class="fa-solid fa-couch"></i> Muebles y Obstáculos',
+                propiedades: '<i class="fa-solid fa-sliders"></i> Ajustes de Selección',
+                cotizacion: '<i class="fa-solid fa-calculator"></i> Cotización / Resumen BOM'
+            };
+            document.getElementById('tab-title').innerHTML = titles[tabId];
+
+            if (tabId === 'cotizacion') {
+                renderBOM();
+            }
+        }
+
+        function toggleDrawer() {
+            const content = document.getElementById('drawer-content');
+            const icon = document.getElementById('drawer-toggle-icon');
+            content.classList.toggle('hidden');
+            icon.classList.toggle('fa-chevron-down');
+            icon.classList.toggle('fa-chevron-up');
+        }
+
+        // --- D-PAD / CAMERA CONTROLS ---
+        function panCanvas(dx, dy) {
+            panX += dx;
+            panY += dy;
+        }
+
+        function zoomCanvas(factor) {
+            scale = Math.min(Math.max(0.4, scale * factor), 2.5);
+        }
+
+        function resetView() {
+            scale = 1;
+            panX = 40;
+            panY = 40;
+        }
+
+        // --- PRESET TEMPLATES ---
+        function loadTemplate(key) {
+            walls = [];
+            devices = [];
+            furniture = [];
+
+            if (key === 'papizza') {
+                // Papizza Commercial Layout
+                walls = [
+                    { x1: 50, y1: 50, x2: 450, y2: 50, type: 'wall' },
+                    { x1: 450, y1: 50, x2: 450, y2: 320, type: 'wall' },
+                    { x1: 450, y1: 320, x2: 50, y2: 320, type: 'wall' },
+                    { x1: 50, y1: 320, x2: 50, y2: 50, type: 'wall' },
+                    // Interior Dividers
+                    { x1: 250, y1: 50, x2: 250, y2: 200, type: 'wall' },
+                    { x1: 50, y1: 180, x2: 120, y2: 180, type: 'door' }
+                ];
+                furniture = [
+                    { x: 150, y: 100, rotation: 0, type: 'counter' },
+                    { x: 350, y: 120, rotation: 0, type: 'desk' },
+                    { x: 350, y: 220, rotation: 0, type: 'sofa' }
+                ];
+                devices = [
+                    { id: 1, type: 'dome', x: 65, y: 65, rotation: 45, fov: 100, range: 15, lensMode: 'standard', label: 'CAM-1 Entrada' },
+                    { id: 2, type: 'bullet', x: 435, y: 65, rotation: 135, fov: 80, range: 18, lensMode: 'ir', label: 'CAM-2 Caja' },
+                    { id: 3, type: 'dome', x: 435, y: 305, rotation: 225, fov: 90, range: 12, lensMode: '4k', label: 'CAM-3 Salón' },
+                    { id: 4, type: 'nvr', x: 380, y: 80, rotation: 0, label: 'NVR Principal' }
+                ];
+            } else if (key === 'podosmart') {
+                // Podosmart Clinic Layout
+                walls = [
+                    { x1: 60, y1: 60, x2: 500, y2: 60, type: 'wall' },
+                    { x1: 500, y1: 60, x2: 500, y2: 350, type: 'wall' },
+                    { x1: 500, y1: 350, x2: 60, y2: 350, type: 'wall' },
+                    { x1: 60, y1: 350, x2: 60, y2: 60, type: 'wall' },
+                    { x1: 220, y1: 60, x2: 220, y2: 350, type: 'wall' }
+                ];
+                devices = [
+                    { id: 1, type: 'ptz', x: 80, y: 80, rotation: 45, fov: 110, range: 20, lensMode: '4k', label: 'CAM-PTZ Recepción' },
+                    { id: 2, type: 'dome', x: 480, y: 80, rotation: 135, fov: 90, range: 14, lensMode: 'standard', label: 'CAM-Consultorio' },
+                    { id: 3, type: 'pir', x: 200, y: 200, rotation: 180, fov: 90, range: 10, label: 'PIR Pasillo' }
+                ];
+            } else if (key === 'residencial') {
+                // Residential 2 Bedrooms
+                walls = [
+                    { x1: 40, y1: 40, x2: 420, y2: 40, type: 'wall' },
+                    { x1: 420, y1: 40, x2: 420, y2: 360, type: 'wall' },
+                    { x1: 420, y1: 360, x2: 40, y2: 360, type: 'wall' },
+                    { x1: 40, y1: 360, x2: 40, y2: 40, type: 'wall' },
+                    { x1: 200, y1: 40, x2: 200, y2: 220, type: 'wall' },
+                    { x1: 40, y1: 220, x2: 420, y2: 220, type: 'wall' }
+                ];
+                devices = [
+                    { id: 1, type: 'bullet', x: 55, y: 55, rotation: 45, fov: 90, range: 15, lensMode: 'ir', label: 'CAM Exterior Frontal' },
+                    { id: 2, type: 'magnetic', x: 210, y: 360, rotation: 0, label: 'Sensor Puerta' },
+                    { id: 3, type: 'dome', x: 400, y: 235, rotation: 225, fov: 100, range: 12, lensMode: 'standard', label: 'CAM Patio' }
+                ];
+            }
+
+            closeModal('templates-modal');
+            resetView();
+        }
+
+        // --- BOM & QUOTATION COMPUTATION ---
+        function renderBOM() {
+            const tbody = document.getElementById('bom-table-body');
+            tbody.innerHTML = '';
+
+            let total = 0;
+            const counts = {};
+
+            // Count equipment
+            devices.forEach(d => {
+                counts[d.type] = (counts[d.type] || 0) + 1;
+            });
+
+            // Est. Cable UTP per device (approx 25 meters per camera)
+            const cameraCount = devices.filter(d => d.type !== 'nvr').length;
+            const estCableMeters = cameraCount * 25;
+
+            // Build Rows
+            Object.keys(counts).forEach(type => {
+                const item = CATALOG[type] || { name: type.toUpperCase(), price: 50 };
+                const qty = counts[type];
+                const subtotal = qty * item.price;
+                total += subtotal;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="py-1.5 font-medium">${item.name}</td>
+                        <td class="py-1.5 text-center font-mono">${qty}</td>
+                        <td class="py-1.5 text-right font-mono">$${item.price.toFixed(2)}</td>
+                        <td class="py-1.5 text-right font-mono">$${subtotal.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            if (cameraCount > 0) {
+                // Cable row
+                const cablePrice = estCableMeters * CATALOG.utp_cable.price;
+                total += cablePrice;
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="py-1.5 font-medium">${CATALOG.utp_cable.name}</td>
+                        <td class="py-1.5 text-center font-mono">${estCableMeters}m</td>
+                        <td class="py-1.5 text-right font-mono">$${CATALOG.utp_cable.price.toFixed(2)}</td>
+                        <td class="py-1.5 text-right font-mono">$${cablePrice.toFixed(2)}</td>
+                    </tr>
+                `;
+
+                // Installation Row
+                const installPrice = cameraCount * CATALOG.installation.price;
+                total += installPrice;
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="py-1.5 font-medium">${CATALOG.installation.name}</td>
+                        <td class="py-1.5 text-center font-mono">${cameraCount}</td>
+                        <td class="py-1.5 text-right font-mono">$${CATALOG.installation.price.toFixed(2)}</td>
+                        <td class="py-1.5 text-right font-mono">$${installPrice.toFixed(2)}</td>
+                    </tr>
+                `;
+            }
+
+            document.getElementById('bom-total-price').innerText = `$${total.toFixed(2)}`;
+        }
+
+        // --- EXPORT PNG WITH TECHNICAL TITLE BLOCK (MEMBRETE PROTEKTA) ---
+        function exportPNG() {
+            // Create offscreen high-res export canvas
+            const expCanvas = document.createElement('canvas');
+            const expCtx = expCanvas.getContext('2d');
+
+            expCanvas.width = 1200;
+            expCanvas.height = 900;
+
+            // Background
+            expCtx.fillStyle = '#0f172a';
+            expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+
+            // Draw Grid
+            expCtx.strokeStyle = '#1e293b';
+            expCtx.lineWidth = 1;
+            for (let x = 0; x < expCanvas.width; x += 30) {
+                expCtx.beginPath();
+                expCtx.moveTo(x, 0);
+                expCtx.lineTo(x, expCanvas.height - 120);
+                expCtx.stroke();
+            }
+            for (let y = 0; y < expCanvas.height - 120; y += 30) {
+                expCtx.beginPath();
+                expCtx.moveTo(0, y);
+                expCtx.lineTo(expCanvas.width, y);
+                expCtx.stroke();
+            }
+
+            // Save layout scaled & centered onto export canvas
+            expCtx.save();
+            expCtx.translate(150, 100);
+            expCtx.scale(1.2, 1.2);
+
+            // Draw Walls
+            walls.forEach(w => {
+                expCtx.beginPath();
+                expCtx.moveTo(w.x1, w.y1);
+                expCtx.lineTo(w.x2, w.y2);
+                expCtx.strokeStyle = w.type === 'wall' ? '#475569' : '#38bdf8';
+                expCtx.lineWidth = w.type === 'wall' ? 10 : 5;
+                expCtx.stroke();
+            });
+
+            // Draw Devices and FOV Cones
+            devices.forEach(d => {
+                expCtx.save();
+                expCtx.translate(d.x, d.y);
+
+                // Cone
+                const angleRad = (d.rotation * Math.PI) / 180;
+                const fovRad = ((d.fov || 90) * Math.PI) / 180;
+                const rangePx = (d.range || 12) * 20;
+
+                expCtx.rotate(angleRad);
+                expCtx.beginPath();
+                expCtx.moveTo(0, 0);
+                expCtx.arc(0, 0, rangePx, -fovRad / 2, fovRad / 2);
+                expCtx.closePath();
+                expCtx.fillStyle = 'rgba(21, 101, 192, 0.35)';
+                expCtx.fill();
+                expCtx.strokeStyle = '#3b82f6';
+                expCtx.stroke();
+
+                // Icon
+                expCtx.beginPath();
+                expCtx.arc(0, 0, 14, 0, Math.PI * 2);
+                expCtx.fillStyle = '#0f172a';
+                expCtx.fill();
+                expCtx.strokeStyle = '#2563eb';
+                expCtx.lineWidth = 2;
+                expCtx.stroke();
+
+                expCtx.font = '600 10px Inter, sans-serif';
+                expCtx.fillStyle = '#ffffff';
+                expCtx.textAlign = 'center';
+                expCtx.fillText(d.label || d.type, 0, 24);
+
+                expCtx.restore();
+            });
+
+            expCtx.restore();
+
+            // -------------------------------------------------------------
+            // DRAW OFFICIAL PROTEKTA TECHNICAL TITLE BLOCK (MEMBRETE)
+            // -------------------------------------------------------------
+            const mbY = expCanvas.height - 120;
+            const mbHeight = 120;
+
+            // Title block background
+            expCtx.fillStyle = '#090d16';
+            expCtx.fillRect(0, mbY, expCanvas.width, mbHeight);
+            expCtx.strokeStyle = '#1d4ed8';
+            expCtx.lineWidth = 3;
+            expCtx.strokeRect(4, mbY + 4, expCanvas.width - 8, mbHeight - 8);
+
+            // Column 1: PROTEKTA Logo & Shield
+            expCtx.fillStyle = '#1e40af';
+            expCtx.fillRect(20, mbY + 20, 50, 50);
+            expCtx.fillStyle = '#ffffff';
+            expCtx.font = 'bold 24px Inter, sans-serif';
+            expCtx.fillText('P', 35, mbY + 53);
+
+            expCtx.font = 'bold 20px Inter, sans-serif';
+            expCtx.fillStyle = '#ffffff';
+            expCtx.fillText('PROTEKTA', 85, mbY + 42);
+            expCtx.font = '11px Inter, sans-serif';
+            expCtx.fillStyle = '#93c5fd';
+            expCtx.fillText('SISTEMAS DE SEGURIDAD & SMART HOME', 85, mbY + 60);
+
+            // Vertical Divider
+            expCtx.strokeStyle = '#334155';
+            expCtx.lineWidth = 1;
+            expCtx.beginPath();
+            expCtx.moveTo(380, mbY + 10);
+            expCtx.lineTo(380, mbY + 110);
+            expCtx.stroke();
+
+            // Column 2: Project Info
+            const dateStr = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+            expCtx.font = '11px Inter, sans-serif';
+            expCtx.fillStyle = '#94a3b8';
+            expCtx.fillText('PROYECTO: Plano Ejecutivo CCTV & Sensores', 400, mbY + 35);
+            expCtx.fillText(`FECHA DE EMISIÓN: ${dateStr}`, 400, mbY + 58);
+            expCtx.fillText('ESCALA TÉCNICA: 1:50 (Métrico Grid 1m)', 400, mbY + 81);
+
+            // Vertical Divider
+            expCtx.beginPath();
+            expCtx.moveTo(750, mbY + 10);
+            expCtx.lineTo(750, mbY + 110);
+            expCtx.stroke();
+
+            // Column 3: Installer & Approval Signature Block
+            expCtx.font = 'bold 12px Inter, sans-serif';
+            expCtx.fillStyle = '#ffffff';
+            expCtx.fillText('INGENIERO INSTALADOR RESPONSABLE:', 770, mbY + 35);
+            expCtx.font = 'bold 13px Inter, sans-serif';
+            expCtx.fillStyle = '#60a5fa';
+            expCtx.fillText('Mario Antonio Guerrero Morales', 770, mbY + 58);
+
+            expCtx.font = '10px Inter, sans-serif';
+            expCtx.fillStyle = '#64748b';
+            expCtx.fillText('Firma y Sello de Certificación Protekta', 770, mbY + 85);
+
+            // Convert to download link
+            const dataUrl = expCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `PROTEKTA_Plano_CCTV_${Date.now()}.png`;
+            link.href = dataUrl;
+            link.click();
+        }
+
+        // --- JSON SAVE & LOAD ---
+        function saveProjectJSON() {
+            const projectData = {
+                company: "PROTEKTA",
+                version: "2.0",
+                date: new Date().toISOString(),
+                walls,
+                devices,
+                furniture
+            };
+            const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `PROTEKTA_Proyecto_${Date.now()}.json`;
+            link.click();
+        }
+
+        // Modal Helpers
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
